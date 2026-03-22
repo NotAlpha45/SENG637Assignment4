@@ -368,6 +368,16 @@ public class RangeTest {
     }
 
     /**
+     * Mutation-focused test for boundary behavior when b0 equals lower bound.
+     * Expected: touching exactly at lower endpoint is not considered intersection.
+     */
+    @Test
+    public void testIntersectsB0AtLowerB1AtLower() {
+        Range r = new Range(2.0, 8.0);
+        assertFalse(r.intersects(2.0, 2.0));
+    }
+
+    /**
      * Test intersects() when both b0 and b1 are below the lower bound.
      * Equivalence Class: Disjoint range entirely to the left
      * Branch: b0 &lt;= lower is true, b1 &gt; lower is false → returns false
@@ -389,6 +399,16 @@ public class RangeTest {
     public void testIntersectsB0InsideRangeB1InsideRange() {
         Range r = new Range(2.0, 8.0);
         assertTrue(r.intersects(3.0, 6.0));
+    }
+
+    /**
+     * Mutation-focused test for inclusive b1 >= b0 condition in second branch.
+     * Expected: a single-point interval inside the range intersects.
+     */
+    @Test
+    public void testIntersectsSinglePointInsideRange() {
+        Range r = new Range(2.0, 8.0);
+        assertTrue(r.intersects(3.0, 3.0));
     }
 
     /**
@@ -507,6 +527,28 @@ public class RangeTest {
     public void testConstrainValueAtUpperBound() {
         Range r = new Range(0.0, 10.0);
         assertEquals(10.0, r.constrain(10.0), 0.0);
+    }
+
+    /**
+     * Mutation-focused test for upper-bound equality using signed zero.
+     * Expected: method returns the original input value (+0.0), not upper bound (-0.0).
+     */
+    @Test
+    public void testConstrainUpperBoundaryKeepsInputSignedZero() {
+        Range r = new Range(-1.0, -0.0);
+        double constrained = r.constrain(+0.0);
+        assertEquals(0x0000000000000000L, Double.doubleToLongBits(constrained));
+    }
+
+    /**
+     * Mutation-focused test for lower-bound equality using signed zero.
+     * Expected: method returns original input value (-0.0), not lower bound (+0.0).
+     */
+    @Test
+    public void testConstrainLowerBoundaryKeepsInputSignedZero() {
+        Range r = new Range(+0.0, 1.0);
+        double constrained = r.constrain(-0.0);
+        assertEquals(0x8000000000000000L, Double.doubleToLongBits(constrained));
     }
 
     /**
@@ -763,6 +805,26 @@ public class RangeTest {
         Range r = new Range(2.0, 8.0);
         assertSame(r, Range.expandToInclude(r, 5.0));
     }
+
+    /**
+     * Mutation-focused test for lower-bound boundary in expandToInclude().
+     * Expected: when value equals lower bound, method returns the same object.
+     */
+    @Test
+    public void testExpandToIncludeValueAtLowerReturnsSameInstance() {
+        Range r = new Range(2.0, 8.0);
+        assertSame(r, Range.expandToInclude(r, 2.0));
+    }
+
+    /**
+     * Mutation-focused test for upper-bound boundary in expandToInclude().
+     * Expected: when value equals upper bound, method returns the same object.
+     */
+    @Test
+    public void testExpandToIncludeValueAtUpperReturnsSameInstance() {
+        Range r = new Range(2.0, 8.0);
+        assertSame(r, Range.expandToInclude(r, 8.0));
+    }
     // #endregion
 
     // #region expand() tests
@@ -934,6 +996,16 @@ public class RangeTest {
     public void testShiftNoZeroCrossingZeroValue() {
         Range r = new Range(0.0, 0.0);
         assertEquals(new Range(3.0, 3.0), Range.shift(r, 3.0, false));
+    }
+
+    /**
+     * Mutation-focused test for value == 0.0 path in shiftWithNoZeroCrossing().
+     * Expected: zero lower bound with negative delta can become negative.
+     */
+    @Test
+    public void testShiftNoZeroCrossingZeroLowerWithNegativeDelta() {
+        Range r = new Range(0.0, 1.0);
+        assertEquals(new Range(-1.0, 0.0), Range.shift(r, -1.0, false));
     }
     // #endregion
 
@@ -1122,6 +1194,31 @@ public class RangeTest {
         int hash1 = exampleRange.hashCode();
         int hash2 = exampleRange.hashCode();
         assertEquals(hash1, hash2);
+    }
+
+    /**
+     * Mutation-focused test with a fixed oracle for hashCode implementation.
+     */
+    @Test
+    public void testHashCodeMatchesExpectedComputation() {
+        Range r = new Range(-9.87654321, 1.23456789);
+
+        long tempLower = Double.doubleToLongBits(-9.87654321);
+        int expected = (int) (tempLower ^ (tempLower >>> 32));
+        long tempUpper = Double.doubleToLongBits(1.23456789);
+        expected = 29 * expected + (int) (tempUpper ^ (tempUpper >>> 32));
+
+        assertEquals(expected, r.hashCode());
+    }
+
+    /**
+     * Mutation-focused test to ensure non-equal ranges do not collapse to same hash.
+     */
+    @Test
+    public void testHashCodeDifferentRangesUsuallyDiffer() {
+        Range r1 = new Range(1.0, 5.0);
+        Range r2 = new Range(1.0, 6.0);
+        assertFalse(r1.hashCode() == r2.hashCode());
     }
     // #endregion
 
