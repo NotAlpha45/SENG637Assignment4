@@ -81,6 +81,78 @@ After re-checking current PIT artifacts, the remaining unresolved entries are:
 	- `constrain` (`SURVIVED` x2)
 	- `expand` (`SURVIVED` x1)
 
+## Analysis of Representative PIT Mutants (Range)
+
+The table below analyzes 13 representative mutants (more than the required 10) and compares behavior under the original and updated `RangeTest` suite.
+
+| # | Method | Mutant | Original Suite | Updated Suite | Evidence / Notes |
+| - | ------ | ------ | -------------- | ------------- | ---------------- |
+| 1 | `intersects(double,double)` | changed conditional boundary (branch around `b0 <= lower`) | SURVIVED | KILLED | Killed by added boundary test for `b0 == lower` touch case |
+| 2 | `intersects(double,double)` | changed conditional boundary (branch around `b1 >= b0`) | SURVIVED | KILLED | Killed by added single-point interval test (`b0 == b1`) |
+| 3 | `expandToInclude()` | changed conditional boundary (lower-side check) | SURVIVED | KILLED | Killed by `value == lower` identity test (`assertSame`) |
+| 4 | `expandToInclude()` | changed conditional boundary (upper-side check) | SURVIVED | KILLED | Killed by `value == upper` identity test (`assertSame`) |
+| 5 | `shiftWithNoZeroCrossing()` | changed conditional boundary (`value > 0.0`) | SURVIVED | KILLED | Killed by zero-lower + negative-delta case |
+| 6 | `hashCode()` | unsigned shift right replaced with shift left | SURVIVED | KILLED | Killed by fixed-oracle hash test |
+| 7 | `hashCode()` | XOR replaced with AND | SURVIVED | KILLED | Killed by fixed-oracle hash test |
+| 8 | `hashCode()` | integer addition replaced with subtraction | SURVIVED | KILLED | Killed by fixed-oracle hash test |
+| 9 | `hashCode()` | integer multiplication replaced with division | SURVIVED | KILLED | Killed by fixed-oracle hash test |
+| 10 | `hashCode()` | return replaced with `0` | SURVIVED | KILLED | Killed by fixed-oracle hash test |
+| 11 | `constrain(double)` | changed conditional boundary (`value > upper` to inclusive) | SURVIVED | SURVIVED | Likely equivalent due outer `!contains(value)` guard |
+| 12 | `expand()` | changed conditional boundary (`lower > upper` to inclusive) | SURVIVED | SURVIVED | Likely equivalent for `lower == upper` scenario |
+| 13 | `contains(double)` | final return replaced with `true` | NO_COVERAGE | NO_COVERAGE | Residual, likely artifact/equivalent-at-point due prior guards |
+
+## Statistics and Mutation Score by Test Suite (Range)
+
+| Range Class + Suite | Killed | Survived | No Coverage | Total | Mutation Score | Test Strength |
+| ------------------- | ------ | -------- | ----------- | ----- | -------------- | ------------- |
+| Original `RangeTest` | 119 | 15 | 1 | 135 | 88% | 89% |
+| Updated `RangeTest` | 131 | 3 | 1 | 135 | 97% | 98% |
+
+Notes:
+
+- Absolute mutation score improvement: `97% - 88% = 9` percentage points.
+- Relative improvement: `9 / 88 = 10.23%`.
+- Survived mutants reduced from `15` to `3`.
+
+## Effect of Equivalent Mutants on Mutation Score Accuracy
+
+Equivalent mutants can make mutation score look lower than the true defect-detection strength of a test suite, because they are counted as not killed even when no test can distinguish them from the original behavior.
+
+For `Range`, the likely equivalent candidates are concentrated in boundary mutations guarded by stronger predicates (`constrain`) and algebraically neutral boundary behavior (`expand`). This creates a conservative bias in raw mutation score.
+
+Impact in this experiment:
+
+- Raw final score: `131/135 = 97%`.
+- If the 3 likely equivalent survivors are excluded, adjusted score is effectively `131/132 = 99.24%`.
+
+Equivalent-mutant detection approach used:
+
+- Semi-automatic triage from PIT (`SURVIVED` + `NO_COVERAGE`).
+- Rule-based candidate filtering (guard-dominance, boundary-only mutations, same-observable-output patterns).
+- Manual source-path confirmation on each candidate.
+
+## How Mutation Score Was Improved (Design Strategy)
+
+The score improvement strategy was targeted and mutation-driven, not random test expansion.
+
+1. Run PIT on original suite and isolate surviving/no-coverage mutants.
+2. Group survivors by method and mutation operator.
+3. Prioritize high-yield groups (multiple survivors in same logic region):
+	- boundary decisions in `intersects` and `expandToInclude`
+	- zero-crossing boundary logic in `shiftWithNoZeroCrossing`
+	- arithmetic/bit-level logic in `hashCode`
+4. Add minimal, high-discrimination tests:
+	- exact-boundary equality cases
+	- identity vs new-instance assertions (`assertSame`)
+	- signed-zero edge behavior to detect subtle boundary changes
+	- deterministic oracle for hash computation
+5. Re-run PIT and iterate until non-equivalent survivors were mostly eliminated.
+
+Result:
+
+- Mutation score improved from `88%` to `97%`.
+- The remaining unresolved mutants are documented and justified as likely equivalent/non-actionable.
+
 ## Targeted Surviving Mutants and Actions
 
 | Mutated Location | Mutation | Why It Survived | Detection Strategy Added | Need Range.java Change? |
