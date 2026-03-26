@@ -12,6 +12,7 @@ This section tracks mutation-testing progress for the `Range` class using PIT wi
 | -------- | ----- | ---------------- | --------------- | -------------- | ------------- | ----------- |
 | PIT 1.6.8 + `ALL` mutators (report rerun) | Baseline (mutation-focused tests disabled) | 915 | 1239 | 74% | 74% | 0 |
 | PIT 1.6.8 + `ALL` mutators (report rerun) | Improved (mutation-focused tests restored) | 996 | 1239 | 80% | 80% | 0 |
+| PIT 1.6.8 + `ALL` mutators (after additional edge/oracle tests) | Latest improved | 1053 | 1239 | 85% | 85% | 0 |
 
 ## Controlled Re-Run Used for Report (PIT 1.6.8 + ALL)
 
@@ -27,6 +28,12 @@ Results used in report:
 - Improved: `996/1239 = 80%`
 - Absolute gain: `6` percentage points
 - Relative gain: `(80 - 74) / 74 = 8.11%`
+
+Latest rerun after adding additional edge/oracle tests:
+
+- Latest improved: `1053/1239 = 85%`
+- Absolute gain vs baseline: `85% - 74% = 11` percentage points
+- Relative gain vs baseline: `11 / 74 = 14.86%`
 
 ## Environment and Tooling Discrepancy Notes
 
@@ -162,12 +169,37 @@ Notes:
 | ------------------- | ------ | -------- | ----------- | ----- | -------------- | ------------- |
 | Baseline (mutation-focused tests disabled) | 915 | 324 | 0 | 1239 | 74% | 74% |
 | Improved (mutation-focused tests restored) | 996 | 243 | 0 | 1239 | 80% | 80% |
+| Latest improved (after additional edge/oracle tests) | 1053 | 186 | 0 | 1239 | 85% | 85% |
 
 Notes:
 
 - Absolute mutation score improvement: `80% - 74% = 6` percentage points.
 - Relative improvement: `6 / 74 = 8.11%`.
 - Survived mutants reduced from `324` to `243`.
+- Latest absolute mutation score improvement: `85% - 74% = 11` percentage points.
+- Latest relative improvement: `11 / 74 = 14.86%`.
+- Latest survived mutants reduced from `324` to `186`.
+
+## Why Further Increase Might Not Be Feasible (ALL Mutators)
+
+Under PIT `1.6.8` with `ALL` mutators enabled, the current score is `1053/1239 = 85%`.
+
+To reach at least `90%`, the suite would need:
+
+- Minimum kills required for `90%`: `ceil(0.90 x 1239) = 1116`
+- Additional kills still needed: `1116 - 1053 = 63`
+
+Given repeated targeted expansions (boundary tests, signed-zero tests, NaN/infinity tests, oracle sweeps, and reflection-based checks for private helpers), the remaining survivors are increasingly dominated by aggressive unary/comparator mutations (especially UOI-family variants) that are often behavior-preserving or extremely hard to distinguish via black-box assertions.
+
+Practical implications:
+
+- Marginal returns are now low: each additional test round yields small gains relative to effort.
+- Many residual survivors likely fall into equivalent or near-equivalent categories under floating-point and guard-dominance semantics.
+- Reaching raw `90%` with `ALL` mutators may require either:
+	- production-code changes purely to expose mutation-sensitive observables (not recommended for this assignment objective), or
+	- exclusion/adjustment for justified equivalent mutants.
+
+Therefore, `85%` is treated as the current practical ceiling for the unchanged `Range.java` implementation under this specific configuration (PIT `1.6.8` + `ALL`).
 
 ## Effect of Equivalent Mutants on Mutation Score Accuracy
 

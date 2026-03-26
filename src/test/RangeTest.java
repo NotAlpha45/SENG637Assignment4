@@ -1,3 +1,6 @@
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 import org.jfree.data.Range;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -330,6 +333,33 @@ public class RangeTest {
     public void testContainsValueInMiddle() {
         assertTrue(exampleRange.contains(0.0));
     }
+
+    /**
+     * Test contains() with NaN input.
+     * Expected: Returns false because NaN fails all ordered comparisons.
+     */
+    @Test
+    public void testContainsNaN() {
+        assertFalse(exampleRange.contains(Double.NaN));
+    }
+
+    /**
+     * Test contains() with positive infinity outside a finite range.
+     * Expected: Returns false.
+     */
+    @Test
+    public void testContainsPositiveInfinityOutsideFiniteRange() {
+        assertFalse(exampleRange.contains(Double.POSITIVE_INFINITY));
+    }
+
+    /**
+     * Test contains() with negative infinity outside a finite range.
+     * Expected: Returns false.
+     */
+    @Test
+    public void testContainsNegativeInfinityOutsideFiniteRange() {
+        assertFalse(exampleRange.contains(Double.NEGATIVE_INFINITY));
+    }
     // #endregion
 
     // #region intersects(double, double) tests
@@ -445,6 +475,58 @@ public class RangeTest {
     public void testIntersectsB0AboveUpper() {
         Range r = new Range(2.0, 8.0);
         assertFalse(r.intersects(9.0, 12.0));
+    }
+
+    /**
+     * Test intersects() with NaN lower argument.
+     * Expected: Returns false.
+     */
+    @Test
+    public void testIntersectsWithNaNLowerArgument() {
+        Range r = new Range(2.0, 8.0);
+        assertFalse(r.intersects(Double.NaN, 5.0));
+    }
+
+    /**
+     * Test intersects() with NaN upper argument.
+     * Expected: Returns false.
+     */
+    @Test
+    public void testIntersectsWithNaNUpperArgument() {
+        Range r = new Range(2.0, 8.0);
+        assertFalse(r.intersects(3.0, Double.NaN));
+    }
+
+    /**
+     * Test intersects() with invalid interval where b1 < b0.
+     * Expected: Returns false in second branch due b1 >= b0 check.
+     */
+    @Test
+    public void testIntersectsInvalidIntervalOrder() {
+        Range r = new Range(2.0, 8.0);
+        assertFalse(r.intersects(5.0, 4.0));
+    }
+
+    /**
+     * Epsilon-boundary test around lower bound for intersects().
+     */
+    @Test
+    public void testIntersectsEpsilonAroundLowerBound() {
+        Range r = new Range(2.0, 8.0);
+        double eps = 1e-12;
+        assertFalse(r.intersects(2.0 - eps, 2.0));
+        assertTrue(r.intersects(2.0 - eps, 2.0 + eps));
+    }
+
+    /**
+     * Epsilon-boundary test around upper bound for intersects().
+     */
+    @Test
+    public void testIntersectsEpsilonAroundUpperBound() {
+        Range r = new Range(2.0, 8.0);
+        double eps = 1e-12;
+        assertTrue(r.intersects(8.0 - eps, 8.0 - eps));
+        assertFalse(r.intersects(8.0, 8.0 + eps));
     }
     // #endregion
 
@@ -573,6 +655,60 @@ public class RangeTest {
     public void testConstrainValueBelowLower() {
         Range r = new Range(0.0, 10.0);
         assertEquals(0.0, r.constrain(-5.0), 0.0);
+    }
+
+    /**
+     * Test constrain() with NaN input.
+     * Expected: Returns NaN unchanged.
+     */
+    @Test
+    public void testConstrainNaNValue() {
+        Range r = new Range(0.0, 10.0);
+        assertTrue(Double.isNaN(r.constrain(Double.NaN)));
+    }
+
+    /**
+     * Test constrain() with positive infinity.
+     * Expected: Clamps to upper bound.
+     */
+    @Test
+    public void testConstrainPositiveInfinity() {
+        Range r = new Range(0.0, 10.0);
+        assertEquals(10.0, r.constrain(Double.POSITIVE_INFINITY), 0.0);
+    }
+
+    /**
+     * Test constrain() with negative infinity.
+     * Expected: Clamps to lower bound.
+     */
+    @Test
+    public void testConstrainNegativeInfinity() {
+        Range r = new Range(0.0, 10.0);
+        assertEquals(0.0, r.constrain(Double.NEGATIVE_INFINITY), 0.0);
+    }
+
+    /**
+     * Epsilon-boundary test around constrain() limits.
+     */
+    @Test
+    public void testConstrainEpsilonAroundBounds() {
+        Range r = new Range(0.0, 10.0);
+        double eps = 1e-12;
+        assertEquals(0.0, r.constrain(-eps), 0.0);
+        assertEquals(10.0, r.constrain(10.0 + eps), 0.0);
+        assertEquals(eps, r.constrain(eps), 0.0);
+        assertEquals(10.0 - eps, r.constrain(10.0 - eps), 0.0);
+    }
+
+    /**
+     * Constrain test with very narrow interval.
+     */
+    @Test
+    public void testConstrainVeryNarrowRange() {
+        Range r = new Range(1.0, 1.0 + 1e-12);
+        assertEquals(1.0, r.constrain(0.5), 0.0);
+        assertEquals(1.0 + 1e-12, r.constrain(2.0), 0.0);
+        assertEquals(1.0 + 5e-13, r.constrain(1.0 + 5e-13), 0.0);
     }
     // #endregion
 
@@ -747,6 +883,64 @@ public class RangeTest {
         Range r2 = new Range(Double.NaN, Double.NaN);
         assertEquals(new Range(2.0, 6.0), Range.combineIgnoringNaN(r1, r2));
     }
+
+    /**
+     * Test combineIgnoringNaN() when only one lower bound is NaN.
+     * Expected: Lower selected from non-NaN bound and upper from max operation.
+     */
+    @Test
+    public void testCombineIgnoringNaNOneLowerNaN() {
+        Range r1 = new Range(Double.NaN, 6.0);
+        Range r2 = new Range(2.0, 5.0);
+        assertEquals(new Range(2.0, 6.0), Range.combineIgnoringNaN(r1, r2));
+    }
+
+    /**
+     * Test combineIgnoringNaN() when only one upper bound is NaN.
+     * Expected: Upper selected from non-NaN bound and lower from min operation.
+     */
+    @Test
+    public void testCombineIgnoringNaNOneUpperNaN() {
+        Range r1 = new Range(1.0, Double.NaN);
+        Range r2 = new Range(2.0, 5.0);
+        assertEquals(new Range(1.0, 5.0), Range.combineIgnoringNaN(r1, r2));
+    }
+
+    /**
+     * Test combineIgnoringNaN() with infinities in finite/extended ranges.
+     * Expected: Proper min/max selection preserving infinities.
+     */
+    @Test
+    public void testCombineIgnoringNaNWithInfinities() {
+        Range r1 = new Range(Double.NEGATIVE_INFINITY, -1.0);
+        Range r2 = new Range(2.0, Double.POSITIVE_INFINITY);
+        assertEquals(new Range(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY),
+                Range.combineIgnoringNaN(r1, r2));
+    }
+
+    /**
+     * Close-value test to stress min/max selection in combineIgnoringNaN().
+     */
+    @Test
+    public void testCombineIgnoringNaNCloseBoundsSelection() {
+        Range r1 = new Range(1.000000000001, 5.000000000001);
+        Range r2 = new Range(1.000000000002, 5.000000000002);
+        Range out = Range.combineIgnoringNaN(r1, r2);
+        assertEquals(1.000000000001, out.getLowerBound(), 0.0);
+        assertEquals(5.000000000002, out.getUpperBound(), 0.0);
+    }
+
+    /**
+     * Reverse close-value order to stress alternate min/max branch decisions.
+     */
+    @Test
+    public void testCombineIgnoringNaNCloseBoundsSelectionReversed() {
+        Range r1 = new Range(1.000000000002, 5.000000000002);
+        Range r2 = new Range(1.000000000001, 5.000000000001);
+        Range out = Range.combineIgnoringNaN(r1, r2);
+        assertEquals(1.000000000001, out.getLowerBound(), 0.0);
+        assertEquals(5.000000000002, out.getUpperBound(), 0.0);
+    }
     // #endregion
 
     // #region expandToInclude() tests
@@ -870,6 +1064,28 @@ public class RangeTest {
     public void testExpandLowerExceedsUpperAfterExpansion() {
         Range result = Range.expand(new Range(0.0, 1.0), -1.5, -1.5);
         assertEquals(new Range(0.5, 0.5), result);
+    }
+
+    /**
+     * Additional expand() oracle check with mixed margins.
+     */
+    @Test
+    public void testExpandMixedMarginsOracle() {
+        Range r = new Range(-4.0, 10.0);
+        Range out = Range.expand(r, 0.125, -0.25);
+        // length = 14, lower = -4 - 1.75 = -5.75, upper = 10 - 3.5 = 6.5
+        assertEquals(new Range(-5.75, 6.5), out);
+    }
+
+    /**
+     * Additional expand() oracle check where margins increase asymmetrically.
+     */
+    @Test
+    public void testExpandAsymmetricPositiveMarginsOracle() {
+        Range r = new Range(1.0, 9.0);
+        Range out = Range.expand(r, 0.375, 0.125);
+        // length = 8, lower = -2.0, upper = 10.0
+        assertEquals(new Range(-2.0, 10.0), out);
     }
     // #endregion
 
@@ -996,6 +1212,48 @@ public class RangeTest {
     public void testShiftNoZeroCrossingZeroValue() {
         Range r = new Range(0.0, 0.0);
         assertEquals(new Range(3.0, 3.0), Range.shift(r, 3.0, false));
+    }
+
+    /**
+     * Test shift() with allowZeroCrossing=false when lower is +0.0 and delta is
+     * negative.
+     * Expected: lower moves negative through zero because exact zero uses value+delta
+     * branch.
+     */
+    @Test
+    public void testShiftNoZeroCrossingPositiveZeroMovesNegative() {
+        Range r = new Range(+0.0, 2.0);
+        assertEquals(new Range(-1.0, 1.0), Range.shift(r, -1.0, false));
+    }
+
+    /**
+     * Test shift() with allowZeroCrossing=false when upper is -0.0 and delta is
+     * positive.
+     * Expected: upper moves positive through zero because exact zero uses value+delta
+     * branch.
+     */
+    @Test
+    public void testShiftNoZeroCrossingNegativeZeroMovesPositive() {
+        Range r = new Range(-2.0, -0.0);
+        assertEquals(new Range(-1.0, 1.0), Range.shift(r, 1.0, false));
+    }
+
+    /**
+     * Epsilon crossing behavior when allowZeroCrossing is false.
+     */
+    @Test
+    public void testShiftNoZeroCrossingEpsilonCrossing() {
+        Range r = new Range(1e-12, 2e-12);
+        assertEquals(new Range(0.0, 1e-12), Range.shift(r, -1e-12, false));
+    }
+
+    /**
+     * Epsilon non-crossing behavior when allowZeroCrossing is false.
+     */
+    @Test
+    public void testShiftNoZeroCrossingEpsilonNoCrossing() {
+        Range r = new Range(-2e-12, -1e-12);
+        assertEquals(new Range(-3e-12, -2e-12), Range.shift(r, -1e-12, false));
     }
 
     /**
@@ -1128,6 +1386,28 @@ public class RangeTest {
     public void testEqualsNull() {
         assertFalse(exampleRange.equals(null));
     }
+
+    /**
+     * Test equals() with NaN lower bound values.
+     * Expected: false because NaN == NaN is false for primitive doubles.
+     */
+    @Test
+    public void testEqualsNaNLowerBounds() {
+        Range r1 = new Range(Double.NaN, 1.0);
+        Range r2 = new Range(Double.NaN, 1.0);
+        assertFalse(r1.equals(r2));
+    }
+
+    /**
+     * Test equals() with NaN upper bound values.
+     * Expected: false because NaN == NaN is false for primitive doubles.
+     */
+    @Test
+    public void testEqualsNaNUpperBounds() {
+        Range r1 = new Range(1.0, Double.NaN);
+        Range r2 = new Range(1.0, Double.NaN);
+        assertFalse(r1.equals(r2));
+    }
     // #endregion
 
     // #region isNaNRange() tests
@@ -1159,6 +1439,26 @@ public class RangeTest {
     @Test
     public void testIsNaNRangeNeitherNaN() {
         assertFalse(exampleRange.isNaNRange());
+    }
+
+    /**
+     * Test isNaNRange() when only lower is NaN.
+     * Expected: false.
+     */
+    @Test
+    public void testIsNaNRangeOnlyLowerNaN() {
+        Range r = new Range(Double.NaN, 1.0);
+        assertFalse(r.isNaNRange());
+    }
+
+    /**
+     * Test isNaNRange() when only upper is NaN.
+     * Expected: false.
+     */
+    @Test
+    public void testIsNaNRangeOnlyUpperNaN() {
+        Range r = new Range(1.0, Double.NaN);
+        assertFalse(r.isNaNRange());
     }
     // #endregion
 
@@ -1220,6 +1520,24 @@ public class RangeTest {
         Range r2 = new Range(1.0, 6.0);
         assertFalse(r1.hashCode() == r2.hashCode());
     }
+
+    /**
+     * Multi-vector hashCode oracle checks to kill arithmetic/unary mutants.
+     */
+    @Test
+    public void testHashCodeOracleMultipleVectors() {
+        double[][] vectors = new double[][] {
+                { -0.0, +0.0 },
+                { Double.NEGATIVE_INFINITY, -1.0 },
+                { -12345.6789, 98765.4321 },
+                { 1.0, Double.POSITIVE_INFINITY }
+        };
+
+        for (double[] v : vectors) {
+            Range r = new Range(v[0], v[1]);
+            assertEquals(expectedHash(v[0], v[1]), r.hashCode());
+        }
+    }
     // #endregion
 
     // #region toString() tests
@@ -1253,5 +1571,270 @@ public class RangeTest {
         Range r = new Range(-3.0, -1.0);
         assertEquals("Range[-3.0,-1.0]", r.toString());
     }
+
+    /**
+     * Oracle sweep for contains() and constrain() on a finite range.
+     */
+    @Test
+    public void testContainsAndConstrainOracleSweep() {
+        Range r = new Range(-3.5, 7.25);
+        double[] specials = new double[] {
+                Double.NEGATIVE_INFINITY, -100.0, -3.5, -3.5 + 1e-12, -0.0, +0.0,
+                7.25 - 1e-12, 7.25, 100.0, Double.POSITIVE_INFINITY, Double.NaN
+        };
+
+        for (double v : specials) {
+            assertEquals(oracleContains(-3.5, 7.25, v), r.contains(v));
+            assertDoubleBitsEqual(oracleConstrain(-3.5, 7.25, v), r.constrain(v));
+        }
+
+        for (int i = -200; i <= 200; i++) {
+            double v = i / 8.0;
+            assertEquals(oracleContains(-3.5, 7.25, v), r.contains(v));
+            assertDoubleBitsEqual(oracleConstrain(-3.5, 7.25, v), r.constrain(v));
+        }
+    }
+
+    /**
+     * Oracle sweep for intersects(double,double) across boundary-heavy pairs.
+     */
+    @Test
+    public void testIntersectsOracleSweep() {
+        Range r = new Range(-2.0, 3.0);
+        double[] values = new double[] {
+                Double.NEGATIVE_INFINITY, -3.0, -2.0, -2.0 + 1e-12,
+                -1.0, -0.0, +0.0, 2.999999999999, 3.0, 4.0,
+                Double.POSITIVE_INFINITY, Double.NaN
+        };
+
+        for (double b0 : values) {
+            for (double b1 : values) {
+                boolean expected = oracleIntersects(-2.0, 3.0, b0, b1);
+                assertEquals(expected, r.intersects(b0, b1));
+            }
+        }
+    }
+
+    /**
+     * Oracle sweep for combineIgnoringNaN() with mixed NaN/finite/infinite bounds.
+     */
+    @Test
+    public void testCombineIgnoringNaNOracleSweep() {
+        Range[] cases = new Range[] {
+                new Range(Double.NaN, Double.NaN),
+                new Range(Double.NaN, 4.0),
+                new Range(-5.0, Double.NaN),
+                new Range(-5.0, 4.0),
+                new Range(Double.NEGATIVE_INFINITY, -1.0),
+                new Range(2.0, Double.POSITIVE_INFINITY)
+        };
+
+        for (Range a : cases) {
+            for (Range b : cases) {
+                Range expected = oracleCombineIgnoringNaN(a, b);
+                Range actual = Range.combineIgnoringNaN(a, b);
+                if (expected == null) {
+                    assertNull(actual);
+                } else {
+                    assertEquals(expected.getLowerBound(), actual.getLowerBound(), 0.0);
+                    assertEquals(expected.getUpperBound(), actual.getUpperBound(), 0.0);
+                }
+            }
+        }
+    }
+
+    /**
+     * Oracle sweep for shift(base, delta, false) including zero-crossing edges.
+     */
+    @Test
+    public void testShiftNoZeroCrossingOracleSweep() {
+        Range[] bases = new Range[] {
+                new Range(-3.0, -1.0),
+                new Range(-1.0, 1.0),
+                new Range(0.0, 0.0),
+                new Range(1e-12, 2e-12),
+                new Range(1.0, 3.0)
+        };
+        double[] deltas = new double[] { -5.0, -1.0, -1e-12, 0.0, 1e-12, 1.0, 5.0 };
+
+        for (Range base : bases) {
+            for (double delta : deltas) {
+                Range expected = oracleShiftNoZeroCrossing(base, delta);
+                Range actual = Range.shift(base, delta, false);
+                assertEquals(expected.getLowerBound(), actual.getLowerBound(), 0.0);
+                assertEquals(expected.getUpperBound(), actual.getUpperBound(), 0.0);
+            }
+        }
+    }
+
+    /**
+     * Direct tests for private min(double,double) via reflection.
+     */
+    @Test
+    public void testPrivateMinOracleViaReflection() throws Exception {
+        assertDoubleBitsEqual(2.0, invokePrivateMin(Double.NaN, 2.0));
+        assertDoubleBitsEqual(1.0, invokePrivateMin(1.0, Double.NaN));
+        assertDoubleBitsEqual(-5.0, invokePrivateMin(-5.0, 3.0));
+        assertDoubleBitsEqual(-7.0, invokePrivateMin(-6.0, -7.0));
+        assertDoubleBitsEqual(Double.NEGATIVE_INFINITY,
+                invokePrivateMin(Double.NEGATIVE_INFINITY, 3.0));
+    }
+
+    /**
+     * Direct tests for private max(double,double) via reflection.
+     */
+    @Test
+    public void testPrivateMaxOracleViaReflection() throws Exception {
+        assertDoubleBitsEqual(2.0, invokePrivateMax(Double.NaN, 2.0));
+        assertDoubleBitsEqual(1.0, invokePrivateMax(1.0, Double.NaN));
+        assertDoubleBitsEqual(3.0, invokePrivateMax(-5.0, 3.0));
+        assertDoubleBitsEqual(-6.0, invokePrivateMax(-6.0, -7.0));
+        assertDoubleBitsEqual(Double.POSITIVE_INFINITY,
+                invokePrivateMax(Double.POSITIVE_INFINITY, 3.0));
+    }
+
+    /**
+     * Direct tests for private shiftWithNoZeroCrossing(double,double) via
+     * reflection.
+     */
+    @Test
+    public void testPrivateShiftWithNoZeroCrossingOracleViaReflection() throws Exception {
+        assertDoubleBitsEqual(5.0, invokePrivateShiftWithNoZeroCrossing(3.0, 2.0));
+        assertDoubleBitsEqual(0.0, invokePrivateShiftWithNoZeroCrossing(1.0, -2.0));
+        assertDoubleBitsEqual(-5.0, invokePrivateShiftWithNoZeroCrossing(-3.0, -2.0));
+        assertDoubleBitsEqual(0.0, invokePrivateShiftWithNoZeroCrossing(-1.0, 2.0));
+        assertDoubleBitsEqual(-1.0, invokePrivateShiftWithNoZeroCrossing(0.0, -1.0));
+        assertDoubleBitsEqual(1.0, invokePrivateShiftWithNoZeroCrossing(-0.0, 1.0));
+    }
+
+    /**
+     * Sweep for private shiftWithNoZeroCrossing to stress unary/constant mutants.
+     */
+    @Test
+    public void testPrivateShiftWithNoZeroCrossingSweepViaReflection() throws Exception {
+        double[] values = new double[] { -5.0, -1.0, -1e-12, -0.0, +0.0, 1e-12, 1.0, 5.0 };
+        double[] deltas = new double[] { -3.0, -1.0, -1e-12, 0.0, 1e-12, 1.0, 3.0 };
+
+        for (double value : values) {
+            for (double delta : deltas) {
+                assertDoubleBitsEqual(
+                        oracleShiftWithNoZeroCrossing(value, delta),
+                        invokePrivateShiftWithNoZeroCrossing(value, delta));
+            }
+        }
+    }
     // #endregion
+
+    private static boolean oracleContains(double lower, double upper, double value) {
+        return value >= lower && value <= upper;
+    }
+
+    private static double oracleConstrain(double lower, double upper, double value) {
+        double result = value;
+        if (!(value >= lower && value <= upper)) {
+            if (value > upper) {
+                result = upper;
+            } else if (value < lower) {
+                result = lower;
+            }
+        }
+        return result;
+    }
+
+    private static boolean oracleIntersects(double lower, double upper, double b0, double b1) {
+        if (b0 <= lower) {
+            return b1 > lower;
+        }
+        return b0 < upper && b1 >= b0;
+    }
+
+    private static Range oracleCombineIgnoringNaN(Range r1, Range r2) {
+        if (r1 == null) {
+            if (r2 != null && r2.isNaNRange()) {
+                return null;
+            }
+            return r2;
+        }
+        if (r2 == null) {
+            if (r1.isNaNRange()) {
+                return null;
+            }
+            return r1;
+        }
+
+        double l = oracleMinNaNIgnoring(r1.getLowerBound(), r2.getLowerBound());
+        double u = oracleMaxNaNIgnoring(r1.getUpperBound(), r2.getUpperBound());
+        if (Double.isNaN(l) && Double.isNaN(u)) {
+            return null;
+        }
+        return new Range(l, u);
+    }
+
+    private static double oracleMinNaNIgnoring(double d1, double d2) {
+        if (Double.isNaN(d1)) {
+            return d2;
+        }
+        if (Double.isNaN(d2)) {
+            return d1;
+        }
+        return Math.min(d1, d2);
+    }
+
+    private static double oracleMaxNaNIgnoring(double d1, double d2) {
+        if (Double.isNaN(d1)) {
+            return d2;
+        }
+        if (Double.isNaN(d2)) {
+            return d1;
+        }
+        return Math.max(d1, d2);
+    }
+
+    private static Range oracleShiftNoZeroCrossing(Range base, double delta) {
+        return new Range(
+                oracleShiftWithNoZeroCrossing(base.getLowerBound(), delta),
+                oracleShiftWithNoZeroCrossing(base.getUpperBound(), delta));
+    }
+
+    private static double oracleShiftWithNoZeroCrossing(double value, double delta) {
+        if (value > 0.0) {
+            return Math.max(value + delta, 0.0);
+        }
+        if (value < 0.0) {
+            return Math.min(value + delta, 0.0);
+        }
+        return value + delta;
+    }
+
+    private static void assertDoubleBitsEqual(double expected, double actual) {
+        assertEquals(Double.doubleToLongBits(expected), Double.doubleToLongBits(actual));
+    }
+
+    private static int expectedHash(double lower, double upper) {
+        long tempLower = Double.doubleToLongBits(lower);
+        int result = (int) (tempLower ^ (tempLower >>> 32));
+        long tempUpper = Double.doubleToLongBits(upper);
+        return 29 * result + (int) (tempUpper ^ (tempUpper >>> 32));
+    }
+
+    private static double invokePrivateMin(double d1, double d2)
+            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        Method m = Range.class.getDeclaredMethod("min", double.class, double.class);
+        m.setAccessible(true);
+        return ((Double) m.invoke(null, d1, d2)).doubleValue();
+    }
+
+    private static double invokePrivateMax(double d1, double d2)
+            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        Method m = Range.class.getDeclaredMethod("max", double.class, double.class);
+        m.setAccessible(true);
+        return ((Double) m.invoke(null, d1, d2)).doubleValue();
+    }
+
+    private static double invokePrivateShiftWithNoZeroCrossing(double value, double delta)
+            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        Method m = Range.class.getDeclaredMethod("shiftWithNoZeroCrossing", double.class, double.class);
+        m.setAccessible(true);
+        return ((Double) m.invoke(null, value, delta)).doubleValue();
+    }
 }
