@@ -8,10 +8,52 @@ This section tracks mutation-testing progress for the `Range` class using PIT wi
 
 ## Run Summary
 
-| Stage | Mutations Killed | Total Mutations | Mutation Score | Test Strength | No Coverage |
-| ----- | ---------------- | --------------- | -------------- | ------------- | ----------- |
-| Before targeted tests | 119 | 135 | 88% | 89% | 1 |
-| After targeted tests | 131 | 135 | 97% | 98% | 1 |
+| Campaign | Stage | Mutations Killed | Total Mutations | Mutation Score | Test Strength | No Coverage |
+| -------- | ----- | ---------------- | --------------- | -------------- | ------------- | ----------- |
+| PIT 1.6.8 + `ALL` mutators (report rerun) | Baseline (mutation-focused tests disabled) | 915 | 1239 | 74% | 74% | 0 |
+| PIT 1.6.8 + `ALL` mutators (report rerun) | Improved (mutation-focused tests restored) | 996 | 1239 | 80% | 80% | 0 |
+
+## Controlled Re-Run Used for Report (PIT 1.6.8 + ALL)
+
+To align with the report comparison requirement, we executed a controlled before/after run using the same command and environment:
+
+- Command: `mvn -Ppit-range test-compile org.pitest:pitest-maven:mutationCoverage -Dmutators=ALL`
+- Baseline run: temporarily disabled the mutation-targeted tests added late in `RangeTest.java`.
+- Improved run: re-enabled those tests and reran the same command.
+
+Results used in report:
+
+- Baseline: `915/1239 = 74%`
+- Improved: `996/1239 = 80%`
+- Absolute gain: `6` percentage points
+- Relative gain: `(80 - 74) / 74 = 8.11%`
+
+## Environment and Tooling Discrepancy Notes
+
+### 1) PIT version discrepancy
+
+Earlier results were produced with a newer PIT line and/or default mutator set, while report-aligned reruns used PIT `1.6.8` with `-Dmutators=ALL`.
+Because PIT versions and mutator sets change both the number and type of generated mutants, raw totals are not directly comparable across those settings.
+
+### 2) Why Eclipse can still differ even with same source
+
+Even when source files are identical, Eclipse runs can still produce different mutant totals than Maven/VS Code runs because PIT mutates compiled bytecode, and bytecode can differ by toolchain and build path.
+
+Common causes:
+
+- Compiler differences (`ecj` in Eclipse vs `javac` in Maven)
+- Different compiler flags/target settings and incremental vs clean compilation
+- Different classpaths/test discovery in IDE launch vs Maven profile execution
+- Different stale/clean artifact states when mutation starts
+
+Conclusion:
+
+- For fair comparison, keep all of the following identical: PIT version, mutator set, compiler path, Java version, test selection, and clean-build process.
+
+## Scope Note for Remaining Sections
+
+The sections below document the earlier default-mutator campaign (total mutants around 135), which was used for targeted survivor analysis and equivalent-mutant discussion.
+They are intentionally kept for methodology and reasoning, but they should not be numerically compared with the report rerun metrics above (`ALL` mutators, total mutants 1239).
 
 ## Semi-Automatic Method for Equivalent Mutant Detection (Range)
 
@@ -46,7 +88,7 @@ The following process was used to semi-automatically identify equivalent-mutant 
 
 ## Manually Verified Equivalent-Mutant Candidates (Range)
 
-After re-checking current PIT artifacts, the remaining unresolved entries are:
+In the historical default-mutator artifacts, the remaining unresolved entries were:
 
 - `contains(double)` final return replacement -> `NO_COVERAGE` (1)
 - `constrain(double)` changed conditional boundary -> `SURVIVED` (2)
@@ -73,10 +115,10 @@ After re-checking current PIT artifacts, the remaining unresolved entries are:
 - Interpretation: likely reporting artifact or effectively equivalent at that point because guards already constrain feasible values.
 - Result: kept as residual `NO_COVERAGE` candidate; no production code change recommended.
 
-## Verification Evidence (Current Artifacts)
+## Verification Evidence (Historical Default-Mutator Artifacts)
 
-- Current PIT run summary remains `131/135` killed (`97%`).
-- Current unresolved list from `Range.java.html` still contains exactly:
+- Historical default-mutator run summary: `131/135` killed (`97%`).
+- Historical unresolved list from `Range.java.html` contained exactly:
 	- `contains` (`NO_COVERAGE` x1)
 	- `constrain` (`SURVIVED` x2)
 	- `expand` (`SURVIVED` x1)
@@ -101,7 +143,7 @@ The table below analyzes 13 representative mutants (more than the required 10) a
 | 12 | `expand()` | changed conditional boundary (`lower > upper` to inclusive) | SURVIVED | SURVIVED | Likely equivalent for `lower == upper` scenario |
 | 13 | `contains(double)` | final return replaced with `true` | NO_COVERAGE | NO_COVERAGE | Residual, likely artifact/equivalent-at-point due prior guards |
 
-## Statistics and Mutation Score by Test Suite (Range)
+## Statistics and Mutation Score by Test Suite (Historical Default-Mutator Campaign)
 
 | Range Class + Suite | Killed | Survived | No Coverage | Total | Mutation Score | Test Strength |
 | ------------------- | ------ | -------- | ----------- | ----- | -------------- | ------------- |
@@ -114,13 +156,26 @@ Notes:
 - Relative improvement: `9 / 88 = 10.23%`.
 - Survived mutants reduced from `15` to `3`.
 
+## Statistics and Mutation Score by Test Suite (Report Rerun, PIT 1.6.8 + ALL)
+
+| Range Class + Suite | Killed | Survived | No Coverage | Total | Mutation Score | Test Strength |
+| ------------------- | ------ | -------- | ----------- | ----- | -------------- | ------------- |
+| Baseline (mutation-focused tests disabled) | 915 | 324 | 0 | 1239 | 74% | 74% |
+| Improved (mutation-focused tests restored) | 996 | 243 | 0 | 1239 | 80% | 80% |
+
+Notes:
+
+- Absolute mutation score improvement: `80% - 74% = 6` percentage points.
+- Relative improvement: `6 / 74 = 8.11%`.
+- Survived mutants reduced from `324` to `243`.
+
 ## Effect of Equivalent Mutants on Mutation Score Accuracy
 
 Equivalent mutants can make mutation score look lower than the true defect-detection strength of a test suite, because they are counted as not killed even when no test can distinguish them from the original behavior.
 
 For `Range`, the likely equivalent candidates are concentrated in boundary mutations guarded by stronger predicates (`constrain`) and algebraically neutral boundary behavior (`expand`). This creates a conservative bias in raw mutation score.
 
-Impact in this experiment:
+Impact in the historical default-mutator campaign:
 
 - Raw final score: `131/135 = 97%`.
 - If the 3 likely equivalent survivors are excluded, adjusted score is effectively `131/132 = 99.24%`.
